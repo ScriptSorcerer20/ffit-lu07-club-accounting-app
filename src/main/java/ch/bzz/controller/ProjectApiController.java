@@ -8,7 +8,6 @@ import ch.bzz.generated.model.LoginProject200Response;
 import ch.bzz.generated.model.LoginRequest;
 import ch.bzz.repository.ProjectRepository;
 import ch.bzz.util.JwtUtil;
-import lombok.extern.java.Log;
 
 import java.util.Optional;
 

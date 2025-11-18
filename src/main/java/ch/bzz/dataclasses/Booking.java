@@ -18,14 +18,16 @@ public class Booking {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+    private Integer bookingNumber;
     private LocalDate date;
+    private String text;
     @ManyToOne
     @JoinColumn(name = "debitAccountId", nullable = false)
     private Account debitAccount;
     @ManyToOne
     @JoinColumn(name = "creditAccountId", nullable = false)
     private Account creditAccount;
-    private Integer amount;
+    private Float amount;
     @ManyToOne
     @JoinColumn(name = "projectName", nullable = false)
     private Project project;
