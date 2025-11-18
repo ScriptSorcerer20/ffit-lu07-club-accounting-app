@@ -90,7 +90,7 @@ public class AccountApiController implements AccountApi {
                     projectName);
 
             try {
-                if (accountName == null || accountName == null) {
+                if (accountName == null) {
                     // Delete account
                     accountRespository.deleteByAccountNumberAndProject_ProjectName(accountNumber, projectName);
                     log.debug("Deleted account: {} (project={})", accountName, projectName);

@@ -18,4 +18,6 @@ public interface AccountRepository extends JpaRepository<Account, Integer> {
     void deleteByAccountNumberAndProject_ProjectName(Integer accountNumber, String projectName);
 
     Optional<Account> findByAccountNumberAndProject_ProjectName(Integer accountNumber, String projectName);
+
+    Optional<Account> findByAccountNumberAndProject(Integer accountNumber, Project project);
 }

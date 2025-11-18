@@ -1,19 +1,23 @@
 package ch.bzz.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import ch.bzz.dataclasses.Account;
 import ch.bzz.dataclasses.Project;
 import ch.bzz.generated.api.BookingApi;
 import ch.bzz.generated.model.Booking;
 import ch.bzz.generated.model.BookingUpdate;
 import ch.bzz.generated.model.UpdateBookingsRequest;
+import ch.bzz.repository.AccountRepository;
 import ch.bzz.repository.BookingRepository;
 import ch.bzz.util.JwtUtil;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
 import org.springframework.http.ResponseEntity;
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -25,10 +29,15 @@ import java.util.Optional;
 public class BookingApiController implements BookingApi {
     private final JwtUtil jwt;
     private final BookingRepository bookingRespository;
+    private final AccountRepository accountRepository;
+    private final EntityManager entityManager;
 
-    public BookingApiController(JwtUtil jwtUtil, BookingRepository bookingRepository) {
+    public BookingApiController(JwtUtil jwtUtil, BookingRepository bookingRepository, EntityManager entityManager,
+            AccountRepository accountRepository) {
         this.jwt = jwtUtil;
         this.bookingRespository = bookingRepository;
+        this.entityManager = entityManager;
+        this.accountRepository = accountRepository;
         log.info("BookingApiController initialized");
     }
 
@@ -70,97 +79,72 @@ public class BookingApiController implements BookingApi {
     @Transactional
     public ResponseEntity<Void> updateBookings(UpdateBookingsRequest updateBookingsRequest) {
 
-        // String projectName = jwt.verifyTokenAndExtractSubject();
-        // log.debug("subject from header: {}", projectName);
+        String projectName = jwt.verifyTokenAndExtractSubject();
+        log.debug("subject from header: {}", projectName);
 
-        // List<BookingUpdate> updates = updateBookingsRequest.getEntries();
-        // if (updates == null || updates.isEmpty()) {
-        // log.info("No bookings provided for update for project {}", projectName);
-        // return ResponseEntity.noContent().build();
-        // }
+        List<BookingUpdate> updates = updateBookingsRequest.getEntries();
 
-        // Project project = bookingRespository.findByProject_ProjectName(projectName);
-        // if (project == null) {
-        // log.error("Project {} not found", projectName);
-        // return ResponseEntity.notFound().build();
-        // }
+        if (updates == null || updates.isEmpty()) {
+            log.info("No bookings provided for update for project {}", projectName);
+            return ResponseEntity.noContent().build();
+        }
 
-        // for (BookingUpdate update : updates) {
+        for (BookingUpdate update : updates) {
 
-        // Integer bookingId = update.getId();
-        // JsonNullable<LocalDate> date = update.getDate();
-        // JsonNullable<String> text = update.getText();
-        // JsonNullable<Integer> debitNumber = update.getDebit();
-        // JsonNullable<Integer> creditNumber = update.getCredit();
-        // JsonNullable<Float> amountFloat = update.getAmount();
+            Integer bookingId = update.getId();
+            LocalDate date = update.getDate().get();
+            String text = update.getText().get();
+            Integer debitNumber = update.getDebit().get();
+            Integer creditNumber = update.getCredit().get();
+            Float amountFloat = update.getAmount().get();
 
-        // log.debug("Processing booking update: id={} text={} project={}",
-        // bookingId, text, projectName);
+            log.debug("Processing booking update: id={} text={} project={}", bookingId, text, projectName);
 
-        // try {
-        // if (bookingId == null) {
-        // // DELETE
-        // Optional<ch.bzz.dataclasses.Booking> toDelete = bookingRespository
-        // .findByIdAndProject_ProjectName(bookingId, projectName);
+            try {
+                if (text == null) {
+                    bookingRespository.deleteByIdAndProject_ProjectName(bookingId, projectName);
+                    log.debug("Deleted booking with id {} (project={})", bookingId, projectName);
+                } else {
+                    log.debug("accountName should not be null: '{}'", text);
+                    Optional<ch.bzz.dataclasses.Booking> existing = bookingRespository
+                            .findByIdAndProject_ProjectName(bookingId, projectName);
 
-        // if (toDelete.isPresent()) {
-        // bookingRespository.deleteByIdAndProject_ProjectName(bookingId, projectName);
+                    Project projectRef = entityManager.getReference(Project.class, projectName);
+                    ch.bzz.dataclasses.Booking entity;
+                    if (existing.isPresent()) {
+                        entity = existing.get();
+                        log.debug("Updating existing booking {}", bookingId);
+                    } else {
+                        // Project projectRef = entityManager.getReference(Project.class, projectName);
+                        entity = new ch.bzz.dataclasses.Booking();
+                        entity.setBookingNumber(bookingId);
+                        entity.setProject(projectRef);
+                        log.debug("Creating new booking {}", bookingId);
+                    }
 
-        // log.debug("Deleted booking with id {} (project={})", update.getId(),
-        // projectName);
-        // }
+                    Account debit = accountRepository.findByAccountNumberAndProject(debitNumber, projectRef)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                    "Debit Account not found"));
 
-        // continue;
-        // }
+                    Account credit = accountRepository.findByAccountNumberAndProject(creditNumber, projectRef)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                    "Debit Account not found"));
 
-        // // CREATE or UPDATE
+                    entity.setDate(date);
+                    entity.setText(text);
+                    entity.setAmount(amountFloat);
+                    entity.setDebitAccount(debit);
+                    entity.setCreditAccount(credit);
 
-        // Optional<ch.bzz.dataclasses.Booking> existing =
-        // bookingRespository.findByIdAndProject_ProjectName(bookingId, projectName);
-
-        // ch.bzz.dataclasses.Booking entity;
-
-        // if (existing.isPresent()) {
-        // entity = existing.get();
-        // log.debug("Updating existing booking {}", bookingId);
-        // } else {
-        // entity = new ch.bzz.dataclasses.Booking();
-        // entity.setId(bookingId);(bookingId);
-        // entity.setProject(project);
-        // log.debug("Creating new booking {}", bookingId);
-        // }
-
-        // // Load debit and credit accounts
-        // ch.bzz.dataclasses.Account debit = bookingRespository
-        // .findByAccountNumberAndProject_ProjectName(debitNumber, projectName)
-        // .orElseThrow(() -> new RuntimeException("Debit account not found: " +
-        // debitNumber));
-
-        // ch.bzz.dataclasses.Account credit = bookingRespository
-        // .findByAccountNumberAndProject_ProjectName(creditNumber, projectName)
-        // .orElseThrow(() -> new RuntimeException("Credit account not found: " +
-        // creditNumber));
-
-        // // Map API → DB
-        // entity.setDate(date);
-        // entity.setAmount(amountFloat.intValue());
-        // entity.setDebitAccount(debit);
-        // entity.setCreditAccount(credit);
-
-        // bookingRepository.save(entity);
-
-        // log.debug("Saved booking {} for project {}", bookingId, projectName);
-
-        // } catch (Exception e) {
-        // log.error("Error updating booking id={} → rollback", bookingId, e);
-        // throw e;
-        // }
-        // }
-
-        // log.info("All bookings updated successfully for project {}", projectName);
-        // return ResponseEntity.noContent().build();
-        // }
-
+                    bookingRespository.save(entity);
+                    log.debug("Saved booking {} for project {}", bookingId, projectName);
+                }
+            } catch (Exception e) {
+                log.error("Error processing account update for id={} project={}. Rolling back.", bookingId,
+                        projectName, e);
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Exception occured", e);
+            }
+        }
         return ResponseEntity.noContent().build();
     }
 }
